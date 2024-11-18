@@ -1,0 +1,484 @@
+<html><head><base href="https://unpkg.com">
+    <meta charset="UTF-8">
+    <title>Looney Teams Generator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --pastel-blue: #A7C7E7;
+            --pastel-pink: #FFB6C1;
+            --pastel-green: #98FB98;
+            --pastel-yellow: #FFFFE0;
+            --pastel-lavender: #E6E6FA;
+        }
+        body {
+            font-family: 'Quicksand', sans-serif;
+            background-color: var(--pastel-blue);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 600px;
+        }
+        .input-section {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 2px solid var(--pastel-lavender);
+            border-radius: 8px;
+        }
+        button {
+            background-color: var(--pastel-green);
+            border: none;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: scale(1.05);
+        }
+        #peopleList {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .person-tag {
+            background-color: #98FB98;  /* Changed from pastel pink to pastel green */
+            padding: 5px 10px;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .person-tag .delete {
+            cursor: pointer;
+            color: red;
+            font-weight: bold;
+        }
+        #teamConfig {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        #teams {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .team {
+            border-radius: 10px;
+            padding: 15px;
+            min-width: 200px;
+        }
+        #fileUpload {
+            display: none;
+        }
+        .file-upload-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .file-upload-btn {
+            background-color: var(--pastel-lavender);
+            border: none;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .file-upload-btn:hover {
+            transform: scale(1.05);
+        }
+        .file-name {
+            color: #666;
+            max-width: 200px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="input-section">
+            <input type="text" id="personInput" placeholder="Enter person's name">
+            <button onclick="addPerson()">➕ Add</button>
+        </div>
+        
+        <div class="file-upload-container">
+            <input type="file" id="fileUpload" accept=".pdf,.docx,.doc,.txt,.csv,.xlsx" onchange="processFileUpload(event)">
+            <button class="file-upload-btn" onclick="document.getElementById('fileUpload').click()">📄 Add Names List</button>
+            <span id="fileName" class="file-name"></span>
+        </div>
+        
+        <div class="input-section" id="teamConfig">
+            <input type="number" id="teamSizeInput" placeholder="People per team" min="1" max="20">
+            <input type="number" id="totalPeopleInput" placeholder="Total people" min="1" max="300">
+            <button onclick="generateTeams()">🎲 Generate Teams</button>
+            <button onclick="resetApplication()" style="background-color: var(--pastel-pink);">🧹 Clean Slate</button>
+        </div>
+        <div id="peopleList"></div>
+        <div id="teams"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.21/mammoth.browser.min.js"></script>
+
+    <script>
+        const people = [];
+        const looneeTunesNames = [
+            'Bugs Bunny', 'Daffy Duck', 'Porky Pig', 'Elmer Fudd', 
+            'Tweety Bird', 'Sylvester', 'Marvin the Martian', 'Tasmanian Devil'
+        ];
+        const teamColors = [
+            '#FFB6C1', '#98FB98', '#87CEFA', '#DDA0DD', 
+            '#F0E68C', '#E6E6FA', '#FFDAB9', '#98FB98'
+        ];
+
+        function addPerson() {
+            const input = document.getElementById('personInput');
+            const name = input.value.trim();
+            
+            if (name && people.length < 300 && !people.includes(name)) {
+                people.push(name);
+                renderPeople();
+                input.value = '';
+            }
+        }
+
+        async function processFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            document.getElementById('fileName').textContent = file.name;
+
+            try {
+                let names = [];
+                const fileExtension = file.name.split('.').pop().toLowerCase();
+
+                switch(fileExtension) {
+                    case 'pdf':
+                        names = await extractPDFNames(file);
+                        break;
+                    case 'docx':
+                    case 'doc':
+                        names = await extractWordNames(file);
+                        break;
+                    case 'txt':
+                        names = await extractTXTNames(file);
+                        break;
+                    case 'csv':
+                        names = await extractCSVNames(file);
+                        break;
+                    case 'xlsx':
+                        names = await extractXLSXNames(file);
+                        break;
+                }
+
+                // Enhanced name extraction and cleaning
+                const processedNames = names
+                    .map(name => name.trim())
+                    // More inclusive name filtering
+                    .filter(name => {
+                        // Allow multiple word names in multiple languages
+                        return name.length >= 3 && 
+                               /^[\p{L}]+(?:\s+[\p{L}]+)*$/u.test(name) && 
+                               name.split(/\s+/).length >= 1;  // Allow single names too
+                    });
+
+                // Logging for transparency
+                console.log('Processed Names:', processedNames);
+
+                // Add unique names with increased safety
+                const uniqueNames = [...new Set(processedNames)];
+                uniqueNames.forEach(name => {
+                    if (people.length < 300 && !people.includes(name)) {
+                        people.push(name);
+                    }
+                });
+
+                renderPeople();
+                
+                // Feedback for user
+                alert(`Successfully imported ${uniqueNames.length} names!`);
+            } catch (error) {
+                console.error('Error processing file:', error);
+                alert('Error processing file. Please try again.');
+            }
+        }
+
+        async function extractXLSXNames(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        // Read the workbook
+                        const workbook = XLSX.read(e.target.result, {type: 'binary'});
+                        
+                        // Get the first sheet
+                        const sheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[sheetName];
+                        
+                        // Convert sheet to JSON
+                        const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                        
+                        // Extract names 
+                        const names = data
+                            .filter(row => Array.isArray(row)) // Ensure it's a row
+                            .map(row => {
+                                // Handle different column configurations
+                                if (row.length >= 2) {
+                                    // Combine first and last name
+                                    return `${row[0]} ${row[1]}`.trim();
+                                } else if (row.length === 1) {
+                                    // Single column name
+                                    return String(row[0]).trim();
+                                }
+                                return null;
+                            })
+                            .filter(name => 
+                                name && 
+                                name.length > 1 && 
+                                /^[\p{L}]+(?:\s+[\p{L}]+)*$/u.test(name)
+                            );
+                        
+                        // Remove potential header if it looks like one
+                        if (names.length > 0 && /^(name|names|nom|nombre|first.*last)/i.test(names[0])) {
+                            names.shift();
+                        }
+                        
+                        resolve(names);
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                reader.readAsBinaryString(file);
+            });
+        }
+
+        async function extractPDFNames(file) {
+            const names = [];
+            const fileReader = new FileReader();
+            
+            return new Promise((resolve, reject) => {
+                fileReader.onload = async (e) => {
+                    try {
+                        const typedArray = new Uint8Array(e.target.result);
+                        const pdf = await pdfjsLib.getDocument(typedArray).promise;
+                        
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            const page = await pdf.getPage(i);
+                            const textContent = await page.getTextContent();
+                            const pageText = textContent.items.map(item => item.str).join('\n');
+                            
+                            // More robust name extraction for multilingual support
+                            const extractedNames = pageText
+                                .split(/\n/)
+                                .map(line => line.trim())
+                                .filter(line => 
+                                    line.length > 1 && 
+                                    /^[\p{L}\s'-]+$/u.test(line)
+                                );
+                            
+                            names.push(...extractedNames);
+                        }
+                        
+                        resolve(names);
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                
+                fileReader.readAsArrayBuffer(file);
+            });
+        }
+
+        async function extractWordNames(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    try {
+                        const arrayBuffer = e.target.result;
+                        const result = await mammoth.extractRawText({arrayBuffer: arrayBuffer});
+                        const text = result.value;
+                        
+                        // Multilingual name extraction
+                        const names = text
+                            .split(/\n/)
+                            .map(line => line.trim())
+                            .filter(line => 
+                                line.length > 1 && 
+                                /^[\p{L}\s'-]+$/u.test(line)
+                            );
+                        
+                        resolve(names);
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        async function extractTXTNames(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const text = e.target.result;
+                    // Multilingual name extraction
+                    const names = text
+                        .split(/\n/)
+                        .map(line => line.trim())
+                        .filter(line => 
+                            line.length > 1 && 
+                            /^[\p{L}\s'-]+$/u.test(line)
+                        );
+                    resolve(names);
+                };
+                reader.readAsText(file, 'UTF-8');  // Explicitly set UTF-8 encoding
+            });
+        }
+
+        async function extractCSVNames(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const csv = e.target.result;
+                    const delimiters = [',', ';', '\t'];
+                    
+                    // Try different delimiters
+                    let names = [];
+                    for (let delimiter of delimiters) {
+                        names = csv
+                            .split('\n')
+                            .map(line => line.trim())
+                            .filter(line => line.length > 0)
+                            .map(line => {
+                                // Split the line into fields
+                                const fields = line.split(delimiter).map(field => field.trim());
+                                
+                                // Different strategies for name extraction
+                                if (fields.length >= 2) {
+                                    // Combine first and last name (first two fields)
+                                    const combinedName = `${fields[0]} ${fields[1]}`;
+                                    return combinedName;
+                                } else if (fields.length === 1) {
+                                    // If only one field, use that
+                                    return fields[0];
+                                }
+                                return null;
+                            })
+                            .filter(name => 
+                                name && 
+                                name.length > 1 && 
+                                /^[\p{L}]+(?:\s+[\p{L}]+)*$/u.test(name)
+                            );
+                        
+                        if (names.length > 0) break;
+                    }
+                    
+                    // Remove potential header if it looks like a header
+                    if (names.length > 0 && /^(name|names|nom|nombre|first.*last)/i.test(names[0])) {
+                        names.shift();
+                    }
+                    
+                    resolve(names);
+                };
+                reader.onerror = reject;
+                reader.readAsText(file, 'UTF-8');
+            });
+        }
+
+        function renderPeople() {
+            const list = document.getElementById('peopleList');
+            list.innerHTML = people.map((person, index) => 
+                `<div class="person-tag">
+                    ${person}
+                    <span class="delete" onclick="deletePerson(${index})">✖</span>
+                </div>`
+            ).join('');
+        }
+
+        function deletePerson(index) {
+            people.splice(index, 1);
+            renderPeople();
+        }
+
+        function generateTeams() {
+            const teamSize = parseInt(document.getElementById('teamSizeInput').value);
+            const totalPeople = parseInt(document.getElementById('totalPeopleInput').value);
+
+            if (!teamSize || !totalPeople || people.length < totalPeople) return;
+
+            const shuffledPeople = [...people].sort(() => 0.5 - Math.random());
+            const selectedPeople = shuffledPeople.slice(0, totalPeople);
+            const teams = {};
+            
+            // Calculate full teams and remainder
+            const fullTeamsCount = Math.floor(totalPeople / teamSize);
+            const remainderPeople = totalPeople % teamSize;
+
+            // Create regular teams
+            let personIndex = 0;
+            for (let i = 0; i < fullTeamsCount; i++) {
+                teams[i] = {
+                    name: looneeTunesNames[i % looneeTunesNames.length],
+                    color: teamColors[i % teamColors.length],
+                    members: selectedPeople.slice(personIndex, personIndex + teamSize)
+                };
+                personIndex += teamSize;
+            }
+
+            // Create a flexible/remainder team if there are leftover people
+            if (remainderPeople > 0) {
+                const flexTeamIndex = fullTeamsCount;
+                teams[flexTeamIndex] = {
+                    name: "Flexible Team 🃏",
+                    color: '#F0E68C', // A distinct pastel color
+                    members: selectedPeople.slice(personIndex)
+                };
+            }
+
+            const teamsContainer = document.getElementById('teams');
+            teamsContainer.innerHTML = Object.values(teams).map(team => 
+                `<div class="team" style="background-color: ${team.color}">
+                    <h3>${team.name}</h3>
+                    ${team.members.map(member => `<p>${member}</p>`).join('')}
+                </div>`
+            ).join('');
+        }
+
+        function resetApplication() {
+            // Clear people array
+            people.length = 0;
+
+            // Clear input fields
+            document.getElementById('personInput').value = '';
+            document.getElementById('teamSizeInput').value = '';
+            document.getElementById('totalPeopleInput').value = '';
+            document.getElementById('fileUpload').value = ''; // Reset file input
+            document.getElementById('fileName').textContent = ''; // Clear file name
+
+            // Clear rendered lists and teams
+            document.getElementById('peopleList').innerHTML = '';
+            document.getElementById('teams').innerHTML = '';
+        }
+    </script>
+</body></html>
